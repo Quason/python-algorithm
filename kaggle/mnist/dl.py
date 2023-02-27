@@ -54,11 +54,17 @@ class MnistDataset(Dataset):
         super().__init__()
         ds = pd.read_csv(csv_fn)
         self.data = ds.to_numpy()
+        self.is_train = is_train
 
     def __getitem__(self, index):
-        img = self.data[index, 1:]
-        img = img.reshape((1, 28, 28))
-        return img, self.data[index, 0]
+        if self.is_train:
+            img = self.data[index, 1:]
+            img = img.reshape((1, 28, 28))
+            return img, self.data[index, 0]
+        else:
+            img = self.data[index, :]
+            img = img.reshape((1, 28, 28))
+            return img, index
     
     def __len__(self):
         return self.data.shape[0]
@@ -133,7 +139,34 @@ def train(train_csv, dst_pth_dir):
             torch.save(net.state_dict(), join(dst_pth_dir, 'E%03d.pth' % (epoch+1)))
 
 
+def predict(test_csv, net_pth, dst_csv):
+    device = torch.device('mps')
+    net = AlexNet(input_channels=1, output_channels=10)
+    net.to(device=device)
+    net.load_state_dict(torch.load(net_pth, map_location=device))
+    net.eval()
+    dataset = MnistDataset(test_csv, is_train=False)
+    loader = DataLoader(dataset, batch_size=100, shuffle=False)
+    labels_pred_stack = []
+    for batch in tqdm(loader):
+        imgs, index = batch
+        imgs = imgs.to(device=device, dtype=torch.float32)
+        labels_pred = net(imgs)
+        labels_pred = labels_pred.cpu()
+        labels_pred = torch.argmax(labels_pred, axis=1)
+        for i in range(len(labels_pred)):
+            labels_pred_stack.append([int(index[i]), int(labels_pred[i])])
+    with open(dst_csv, 'w') as fp:
+        fp.write('ImageId,Label\n')
+        for item in labels_pred_stack:
+            fp.write(f'{item[0]+1},{item[1]}\n')
+
+
 if __name__ == '__main__':
     train_csv = '/Users/marvin/Documents/kaggle/digit-recognizer/train.csv'
     dst_pth_dir = '/Users/marvin/Documents/kaggle/digit-recognizer/torch_pth/AlexNet/'
-    train(train_csv, dst_pth_dir)
+    test_csv = '/Users/marvin/Documents/kaggle/digit-recognizer/test.csv'
+    net_pth = '/Users/marvin/Documents/kaggle/digit-recognizer/torch_pth/AlexNet/E019.pth'
+    dst_csv = '/Users/marvin/Documents/kaggle/digit-recognizer/predict_alexnet.csv'
+    # train(train_csv, dst_pth_dir)
+    predict(test_csv, net_pth, dst_csv)
