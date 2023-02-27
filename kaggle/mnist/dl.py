@@ -75,16 +75,19 @@ def split_dataset(dataset, train_percent, train_batch_size, test_batch_size):
 def metrics(x, y):
     x = torch.squeeze(x)
     y = torch.squeeze(y)
-    oa = float(torch.sum(x==y) / len(x))
-    return oa
+    if x.shape:
+        oa = float(torch.sum(x==y) / len(x))
+        return oa
+    else:
+        return None
     
 
 def train(train_csv, dst_pth_dir):
-    # device = torch.device('mps')
-    device = torch.device('cpu')
+    device = torch.device('mps')
+    # device = torch.device('cpu')
     lr = 1e-4
-    epochs = 100
-    batch_size = 50
+    epochs = 50
+    batch_size = 100
     net = AlexNet(input_channels=1, output_channels=10)
     net.to(device=device)
     dataset = MnistDataset(train_csv, is_train=True)
@@ -117,14 +120,15 @@ def train(train_csv, dst_pth_dir):
             labels_pred = labels_pred.cpu()
             labels_pred = torch.argmax(labels_pred, axis=1)
             oa = metrics(labels, labels_pred)
-            test_oa.append(oa)
+            if oa is not None:
+                test_oa.append(oa)
         oa_mean = np.mean(test_oa)
         print('epoch %03d: loss=%.2f, test OA=%.2f' % (
             epoch+1, np.mean(epoch_loss), oa_mean
         ))
 
         # save model
-        if epoch >= 10 and oa_mean > oa_best:
+        if epoch >= 3 and oa_mean > oa_best:
             oa_best = oa_mean
             torch.save(net.state_dict(), join(dst_pth_dir, 'E%03d.pth' % (epoch+1)))
 
